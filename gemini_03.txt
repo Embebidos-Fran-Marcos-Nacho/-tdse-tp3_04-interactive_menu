@@ -1,0 +1,78 @@
+El código fuente proporcionado en los archivos **`board.h`**, **`dwt.h`** y **`systick.c`** está diseñado para trabajar con microcontroladores **ARM Cortex-M**, típicamente en el contexto de proyectos de **STM32** utilizando la **HAL** (Hardware Abstraction Layer) o librerías de bajo nivel.
+
+A continuación, se presenta un análisis y explicación del funcionamiento de cada archivo.
+
+-----
+
+## 1\. Archivo `board.h`
+
+El archivo `board.h` se encarga de definir **macros de configuración** relacionadas con el *hardware* de la placa de desarrollo que se esté utilizando. Su principal objetivo es proporcionar una **capa de abstracción** para acceder a los periféricos comunes (como botones y LEDs) de diferentes placas con un conjunto consistente de nombres.
+
+### Funcionamiento Clave
+
+1.  **Definición de Placas:** Define una lista de constantes numéricas para identificar diferentes placas STM32 Nucleo y Discovery (ej., `NUCLEO_F103RC`, `STM32F407G_DISC1`).
+    ```c
+    #define NUCLEO_F103RC		(0)
+    // ... otras placas
+    ```
+2.  **Selección de Placa:** La macro `BOARD` selecciona la placa activa, que por defecto es `NUCLEO_F103RC` (STM32 Nucleo de 64 pines).
+    ```c
+    #define BOARD (NUCLEO_F103RC)
+    ```
+3.  **Abstracción de Periféricos:** Utiliza directivas de preprocesador (`#if`, `#elif`, `#endif`) para definir las macros de los pines de botones (`BTN_A_PIN`, `BTN_ENT_PIN`, etc.) y LEDs (`LED_A_PIN`) **específicas para la placa seleccionada**.
+      * Define el **pin**, el **puerto** GPIO, y el **estado lógico** que corresponde al estado *presionado* (`BTN_A_PRESSED`) o *encendido* (`LED_A_ON`).
+      * **Ejemplo para Nucleo de 64 pines** (`NUCLEO_F103RC`, `NUCLEO_F401RE`, etc.):
+        ```c
+        #define BTN_A_PIN		B1_Pin
+        #define BTN_A_PORT		B1_GPIO_Port
+        #define BTN_A_PRESSED	GPIO_PIN_RESET // Botón es activo bajo
+        // ...
+        #define LED_A_PIN		LD2_Pin
+        #define LED_A_PORT		LD2_GPIO_Port
+        #define LED_A_ON		GPIO_PIN_SET // LED enciende con nivel alto
+        ```
+      * **Importante:** La definición de los estados `_PRESSED` y `_HOVER` (no presionado) o `_ON` y `_OFF` varía según la placa, ya que algunos botones son **activo alto** y otros **activo bajo**.
+
+-----
+
+## 2\. Archivo `dwt.h`
+
+El archivo `dwt.h` proporciona un conjunto de **funciones *inline*** para utilizar el **DWT (Data Watchpoint and Trace) Cycle Counter** del núcleo **ARM Cortex-M** para realizar **mediciones de tiempo de alta precisión** a nivel de ciclos de reloj.
+
+### Funcionamiento Clave
+
+El DWT Cycle Counter es un registro especial que cuenta el número de ciclos de reloj que han transcurrido desde que se habilitó. Su uso es común para *benchmarking* (medición de rendimiento) de código.
+
+1.  **`cycle_counter_init()`:** Inicializa y pone en marcha el contador de ciclos.
+      * Habilita el hardware DWT/Trace con `CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;`.
+      * Reinicia el contador a cero con `DWT->CYCCNT = 0;`.
+      * Habilita el conteo de ciclos con `DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;`.
+2.  **`cycle_counter_reset()`:** Pone el contador `DWT->CYCCNT` a cero sin afectar la habilitación del DWT.
+3.  **`cycle_counter_enable()` / `cycle_counter_disable()`:** Permiten iniciar o detener el conteo de ciclos sin reiniciar el valor.
+4.  **`cycle_counter_get()`:** Devuelve el valor actual del contador de ciclos (`DWT->CYCCNT`) como un `uint32_t`.
+5.  **`cycle_counter_get_time_us()`:** Calcula y devuelve el tiempo transcurrido en **microsegundos ($\mu s$)**.
+      * La fórmula utilizada es:
+        $$\text{Tiempo} (\mu s) = \frac{\text{DWT->CYCCNT}}{\text{SystemCoreClock} / 1000000}$$
+      * Donde `SystemCoreClock` es la frecuencia del reloj del sistema en Hz, y $\frac{\text{SystemCoreClock}}{1000000}$ es el número de ciclos por microsegundo.
+
+El código incluye un **ejemplo comentado** de cómo se usaría el DWT para medir el tiempo que toma ejecutar una sección de código, flanqueado por operaciones de manipulación de un pin GPIO (para ver la señal en un osciloscopio).
+
+-----
+
+## 3\. Archivo `systick.c`
+
+El archivo `systick.c` implementa una función de **retardo bloqueante** de alta precisión basada en el temporizador **SysTick** del núcleo ARM Cortex-M.
+
+### Funcionamiento Clave
+
+El SysTick es un temporizador del núcleo que se utiliza comúnmente para generar la base de tiempo del sistema operativo o para retardos. En este caso, se usa su capacidad de conteo de ciclos descendente para crear un retardo en microsegundos.
+
+1.  **`systick_delay_us(uint32_t delay_us)`:**
+      * **Cálculo de Conteo Objetivo:** Calcula el número total de *SysTick counts* (`target`) necesarios para el retardo en microsegundos, usando la frecuencia del reloj del sistema (`SystemCoreClock`).
+        $$\text{target} = \text{delay\_us} \times \frac{\text{SystemCoreClock}}{1000000}$$
+      * **Lógica de Conteo:** El SysTick cuenta hacia *abajo*. La función usa un bucle `while(1)` para medir los ciclos transcurridos (`elapsed`).
+      * **Manejo de *Wrap-around* (Desbordamiento):**
+          * La parte crucial del código es manejar el momento en que el contador SysTick (`SysTick->VAL`) llega a cero y se recarga automáticamente a su valor máximo (`SysTick->LOAD`).
+          * Si el valor actual (`current`) es **menor o igual** al valor de inicio (`start`), el contador no ha desbordado, y el tiempo transcurrido es simplemente $\text{start} - \text{current}$.
+          * Si el valor actual (`current`) es **mayor** al de inicio (`start`), el contador ha desbordado, y se debe sumar el valor máximo (`SysTick->LOAD`) para obtener el tiempo real transcurrido desde el inicio: $\text{elapsed} = \text{SysTick->LOAD} + \text{start} - \text{current}$.
+      * **Finalización:** El bucle termina cuando `elapsed` (el tiempo transcurrido) es mayor o igual a `target` (el tiempo deseado).

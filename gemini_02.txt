@@ -1,0 +1,130 @@
+El código fuente adjunto implementa un **sistema embebido de tiempo real con un planificador cooperativo no preventivo basado en eventos y tiempo**, donde las tareas se ejecutan en un bucle principal (super-loop) controlado por el tick del sistema.
+
+A continuación, se detalla el análisis y la explicación del funcionamiento de cada archivo, y finalmente, se aborda el impacto del uso de `LOGGER_INFO()` en las variables solicitadas.
+
+---
+
+## 1. Análisis y Explicación del Código Fuente
+
+### 1.1. `logger.h` y `logger.c` (Sistema de Logging)
+
+Estos archivos implementan un sistema de **logging básico** que permite la impresión de información de diagnóstico en tiempo de ejecución, configurado para usar **Semihosting** (`LOGGER_CONFIG_USE_SEMIHOSTING` es `1`).
+
+* **`logger.h`**:
+    * Define constantes de configuración como `LOGGER_CONFIG_ENABLE` (habilitado) y `LOGGER_CONFIG_MAXLEN` (longitud máxima del mensaje, 64 bytes).
+    * La macro principal es `LOGGER_LOG(...)`, que:
+        1.  **Deshabilita interrupciones** (`__asm("CPSID i");`).
+        2.  Usa `snprintf` para formatear el mensaje en el *buffer* global `logger_msg`.
+        3.  Llama a `logger_log_print_()` para la impresión.
+        4.  **Habilita interrupciones** (`__asm("CPSIE i");`).
+    * La macro `LOGGER_INFO(...)` añade un prefijo `[info] ` y un salto de línea (`\n`) al mensaje logueado, internamente usando dos llamadas a `LOGGER_LOG`.
+    * La macro `GET_NAME(var)` se usa para obtener el nombre de una variable como una cadena literal (stringification).
+
+* **`logger.c`**:
+    * Implementa el *buffer* `logger_msg_buffer_` y el puntero global `logger_msg`.
+    * La función `logger_log_print_(char* const msg)` usa `printf(msg)` y `fflush(stdout)` para la salida, lo cual es la implementación estándar para **Semihosting** en entornos de desarrollo de microcontroladores (cuando `LOGGER_CONFIG_USE_SEMIHOSTING` es `1`).
+
+### 1.2. `app.c` (Bucle Principal y Planificador)
+
+Este es el **módulo principal de la aplicación** que gestiona el sistema de tareas. Implementa un **planificador cooperativo** basado en el **tick del sistema** (generado por `HAL_SYSTICK_Callback`).
+
+* **Estructuras de Datos**:
+    * `task_cfg_t`: Define la configuración de una tarea, incluyendo punteros a las funciones de **inicialización** (`task_init`) y **actualización/ejecución** (`task_update`).
+    * `task_dta_t`: Almacena datos de ejecución, notablemente el **WCET** (*Worst-Case Execution Time*) de la tarea en microsegundos.
+    * `task_cfg_list[]`: Un arreglo que lista las tareas del sistema (`task_sensor` y `task_menu`).
+
+* **`app_init()`**:
+    * Inicializa el contador de la aplicación (`g_app_cnt`).
+    * Inicializa un **contador de ciclos** (`cycle_counter_init()`) para medir los tiempos de ejecución.
+    * Recorre `task_cfg_list`, llamando a la función `task_init` de cada tarea.
+    * Inicializa las variables de WCET en `task_dta_list`.
+    * Inicializa los **contadores de tick compartidos** (`g_app_tick_cnt`, `g_task_sensor_tick_cnt`, `g_task_menu_tick_cnt`), protegiéndolos con **deshabilitación/habilitación de interrupciones** (`__asm("CPSID i");` / `__asm("CPSIE i");`).
+
+* **`app_update()` (Bucle Principal/Super-Loop)**:
+    * Este es el corazón del planificador.
+    * **Control de Tiempo**: Entra en un bucle `while (b_time_update_required)` si el tick global (`g_app_tick_cnt`) ha sido incrementado por la interrupción (indica un nuevo período de tiempo). Decrementa `g_app_tick_cnt` dentro de una **sección crítica** (interrupciones deshabilitadas) antes de procesar el tick.
+    * **Ejecución de Tareas**:
+        * Dentro del bucle, itera sobre `task_cfg_list`.
+        * Mide el tiempo de ejecución de cada tarea:
+            1.  `cycle_counter_reset()` (inicio de medición).
+            2.  Llama a la función `task_update` de la tarea actual.
+            3.  `cycle_counter_get_time_us()` (fin de medición y obtención del tiempo en $\mu s$).
+        * **Cálculo de Métricas**: Acumula el tiempo en `g_app_runtime_us` y actualiza el **WCET** de la tarea si el tiempo medido es mayor al WCET registrado.
+    * **Esquema Event-Triggered/Time-Triggered**: Las tareas se ejecutan *solo* si el tick del sistema ha ocurrido, lo que proporciona una base temporal (Time-Triggered) para que las tareas verifiquen si deben actuar (Event-Triggered).
+
+* **`HAL_SYSTICK_Callback()`**:
+    * Esta función es la rutina de servicio de interrupción (ISR) del SysTick.
+    * **Incrementa los contadores de tick** de la aplicación y de cada tarea, haciéndolos $\text{volatile}$ para que el compilador no los optimice y sean accesibles al bucle principal.
+
+### 1.3. `task_sensor.c` (Lógica de Debounce y Eventos)
+
+Implementa la lógica de **lectura de botones con *debounce* (antirrebote)** mediante una **máquina de estados finitos (FSM)** para cada botón/sensor.
+
+* **Propósito**: Leer el estado de los pines GPIO conectados a los botones (Entrar, Siguiente, Escapar) e inyectar eventos en la cola de la tarea `task_menu`.
+* **`task_sensor_cfg_list`**: Define la configuración de cada botón (puerto, pin, estado presionado, y el tiempo máximo de *debounce* `DEL_BTN_XX_MAX` = 50ul).
+* **`task_sensor_dta_list`**: Almacena el estado (FSM) actual de cada botón.
+* **`task_sensor_update()`**:
+    * Similar a `app_update()`, usa `g_task_sensor_tick_cnt` en una sección crítica para controlar cuándo ejecutar la lógica (cada vez que ocurre un tick).
+* **`task_sensor_statechart()`**:
+    * Itera sobre cada botón/sensor.
+    * **Lectura y Evento Interno**: Lee el pin GPIO (`HAL_GPIO_ReadPin`) y establece un evento interno (`EV_BTN_XX_DOWN` o `EV_BTN_XX_UP`).
+    * **FSM (Debounce)**:
+        * **Estados**: `ST_BTN_XX_UP` (reposo, suelto), `ST_BTN_XX_FALLING` (transición a presionado, contando *debounce*), `ST_BTN_XX_DOWN` (presionado, reposo), `ST_BTN_XX_RISING` (transición a suelto, contando *debounce*).
+        * **Transición a DOWN**: Si está en `ST_BTN_XX_FALLING` y el contador `tick` llega a cero **y** el estado físico sigue siendo `DOWN`, se considera un evento de pulsación firme y se usa `put_event_task_menu(p_task_sensor_cfg->signal_down)` para **enviar el evento** (`EV_MEN_ENT_ACTIVE`, etc.) a la tarea `task_menu`.
+        * **Transición a UP**: De manera similar, se envía el evento `signal_up` (`EV_MEN_ENT_IDLE`, etc.) cuando la FSM detecta la liberación firme del botón.
+
+### 1.4. `task_menu.c` (Lógica de Interfaz y Display)
+
+Implementa la lógica del **menú interactivo** mediante una **máquina de estados finitos (FSM)** controlada por eventos y temporización, y gestiona la salida a un display LCD.
+
+* **Propósito**: Controlar el estado del menú basado en eventos recibidos (`EV_MEN_ENT_ACTIVE`, `EV_MEN_ENT_IDLE`, etc.) de `task_sensor` y actualizar la pantalla.
+* **`task_menu_dta`**: Estructura de datos para la FSM del menú (estado, evento, flag, contador `tick`).
+* **`task_menu_update()`**:
+    * Controlada por `g_task_menu_tick_cnt` de manera similar a otras tareas, ejecutándose en cada tick.
+    * Llama a `task_menu_statechart()`.
+* **`task_menu_statechart()`**:
+    * **Recepción de Eventos**: Usa `any_event_task_menu()` y `get_event_task_menu()` (implementadas en `task_menu_interface.h` no adjunto) para leer eventos en cola enviados por `task_sensor`.
+    * **FSM**:
+        * **`ST_MEN_XX_IDLE`**: Estado de reposo. Transiciona a `ST_MEN_XX_ACTIVE` al recibir `EV_MEN_ENT_ACTIVE`.
+        * **`ST_MEN_XX_ACTIVE`**: Estado activo.
+            * Transiciona a `ST_MEN_XX_IDLE` al recibir `EV_MEN_ENT_IDLE`.
+            * **Temporización de Actualización**: Decrementa un contador `tick`. Cuando llega a cero (`DEL_MEN_XX_MIN`), lo reinicia a `DEL_MEN_XX_MAX` (500ul) y **actualiza el display LCD**:
+                * Muestra el valor de `g_task_menu_cnt/1000ul` en la posición (10, 1) del display. Esto muestra una métrica de ejecución de la tarea.
+
+---
+
+## 2. Impacto del Uso de `LOGGER_INFO()`
+
+La macro `LOGGER_INFO()` introduce una **sobrecarga de tiempo de ejecución significativa** en el código por las siguientes razones:
+
+1.  **Deshabilitación/Habilitación de Interrupciones**: El *logging* ocurre dentro de una sección crítica (`__asm("CPSID i");` y `__asm("CPSIE i");`), lo que **bloquea completamente el sistema** de responder a otros eventos (incluyendo el SysTick y otros periféricos) mientras se procesa el mensaje.
+2.  **Formateo de String (`snprintf`)**: La función `snprintf` es una operación costosa en tiempo de CPU, especialmente en sistemas embebidos.
+3.  **Salida de Caracteres (`printf`/Semihosting)**: En el caso de **Semihosting** (`logger_log_print_`), el $\text{printf}$ requiere una comunicación compleja entre el microcontrolador y el depurador (Debugger/IDE) a través de canales especiales. Esta comunicación es inherentemente **lenta** (mucho más lenta que cualquier otra instrucción de CPU) y consume un tiempo considerable de ejecución (cientos o miles de ciclos de reloj).
+4.  **Doble Llamada en `LOGGER_INFO`**: La macro `LOGGER_INFO` llama a `LOGGER_LOG` dos veces (una para el prefijo, otra para el mensaje y `\n`), duplicando los puntos 1, 2 y 3.
+
+### Impacto en Variables de Tiempo de Ejecución (WCET y Runtime)
+
+Las variables `g_app_runtime_us` y `task_dta_list[index].WCET` registran el tiempo consumido (en **microsegundos, $\mu s$**) durante la ejecución de las tareas dentro de `app_update()`. La variable `g_task_test_tick_cnt` **no existe** en los archivos adjuntos (las variables de tick de tarea son `g_task_sensor_tick_cnt` y `g_task_menu_tick_cnt`). Asumiré que se refiere al **WCET** y el **Runtime** de las tareas que usan $\text{LOGGER\_INFO()}$.
+
+#### 2.1. `g_app_runtime_us` (Unidad: $\mu s$)
+
+* **Definición**: Tiempo total acumulado de ejecución de *todas* las tareas (`task_sensor_update` y `task_menu_update`) durante un ciclo de $\text{app\_update()}$.
+* **Impacto de `LOGGER_INFO()`**: El uso de `LOGGER_INFO()` **incrementará dramáticamente** el valor de `g_app_runtime_us` durante el ciclo en que se ejecuta. Esto se debe a que el tiempo consumido por `LOGGER_INFO` (principalmente por la operación de Semihosting y el bloqueo del sistema) se mide como parte del tiempo de ejecución de la tarea que lo llama.
+
+#### 2.2. `task_dta_list[index].WCET` (Unidad: $\mu s$)
+
+* **Definición**: El tiempo de ejecución en $\mu s$ más largo registrado para cada tarea.
+* **Impacto de `LOGGER_INFO()`**: El `LOGGER_INFO()` se usa solo en las funciones de **inicialización** (`task_sensor_init` y `task_menu_init`), no en las funciones de actualización (`task_sensor_update` y `task_menu_update`) que son las que se miden en el bucle principal `app_update()`.
+
+    * **Durante la Inicialización (`app_init`)**: La medición del tiempo y el registro del WCET ocurren **después de la inicialización** en `app_update()`. Por lo tanto, el $\text{LOGGER\_INFO()}$ *durante la inicialización* (llamado en `task_init`) **no impacta directamente** en el valor inicial del WCET registrado en `task_dta_list` (que comienza en `TASK_X_WCET_INI = 0ul`), ya que la medición comienza en el primer `app_update()`.
+
+    * **Si se Usara en `task_update`**: Si se usara `LOGGER_INFO()` dentro de `task_sensor_update()` o `task_menu_update()`, el `WCET` de la tarea correspondiente se **dispararía a un valor muy alto** debido a la sobrecarga de Semihosting, y este valor (el "peor caso") se mantendría a menos que ocurriera un evento más largo.
+
+#### 2.3. Variables `g_task_X_tick_cnt` (Unidad: $\text{Ticks}$, típicamente $mS$)
+
+* **Definición**: Contadores que se incrementan en la ISR del SysTick y controlan la cadencia de ejecución de cada tarea.
+* **Impacto de `LOGGER_INFO()`**:
+    * El `LOGGER_INFO()` es una operación muy lenta (en $\mu s$ o incluso $mS$) que se ejecuta con las **interrupciones deshabilitadas**.
+    * Mientras las interrupciones están deshabilitadas, el **SysTick ISR no puede ejecutarse**.
+    * Si la duración de la operación `LOGGER_INFO()` se acerca o excede el período del SysTick (típicamente 1 ms o 1000 $\mu s$), se producirá una **pérdida de ticks** (Jitter/Drift).
+    * **Consecuencia**: Las variables `g_task_sensor_tick_cnt` y `g_task_menu_tick_cnt` se **incrementarían con una frecuencia menor** a la esperada, haciendo que las tareas se ejecuten de forma menos precisa y potencialmente *más tarde* de lo programado. Esto afecta la precisión del planificador.

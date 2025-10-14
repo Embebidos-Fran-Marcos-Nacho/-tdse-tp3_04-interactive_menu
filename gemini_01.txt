@@ -1,0 +1,70 @@
+El código fuente implementa un sistema embebido para un microcontrolador STM32F1xx, utilizando un **planificador cooperativo** (también conocido como sistema *Foreground/Background*) con monitoreo de tiempo de ejecución (WCET) basado en el periférico DWT (Data Watchpoint and Trace).
+
+A continuación, se presenta el análisis del funcionamiento del código y la evolución de las variables solicitadas.
+
+---
+
+## 1. Análisis y Explicación del Funcionamiento del Código Fuente
+
+El sistema se organiza en tres capas principales: Inicialización del Hardware, Planificador de Tareas y Lógica de Aplicación (Tareas).
+
+### `main.c` y `SystemClock_Config()`
+* **Inicialización del Sistema:** La función `main()` comienza con la inicialización del hardware base (`HAL_Init()`) y la configuración del reloj del sistema (`SystemClock_Config()`).
+    * La configuración del reloj utiliza el oscilador HSI (8 MHz) dividido por 2, alimentando un PLL (Phase-Locked Loop) con un factor multiplicador de 16, resultando en una frecuencia de reloj de sistema (HCLK) de **64 MHz**.
+* **Ciclo Principal:** Después de la inicialización de periféricos y de la aplicación (`app_init()`), el programa entra en un bucle infinito `while(1)` que llama repetidamente a la función `app_update()`.
+
+### `app.c` (Planificador y Monitor de Tareas)
+Este archivo es el **núcleo del sistema operativo en tiempo real simple (RTOS)**:
+* **Estructura de Tareas:** Define la lista de tareas a ejecutar (`task_cfg_list`) y las estructuras de datos asociadas a su rendimiento (`task_dta_list`). Las tareas definidas son `task_sensor` y `task_menu`.
+* **Inicialización (`app_init()`):** Reinicia contadores globales (`g_app_cnt`, `g_app_tick_cnt`), inicializa el WCET de todas las tareas a 0 y ejecuta la función `task_init` de cada tarea.
+* **Scheduler (`app_update()`):**
+    1.  **Sincronización:** El scheduler se sincroniza mediante la variable **`g_app_tick_cnt`**, que es decrementada por una Interrupción de Temporizador (probablemente SysTick, manejada en `stm32f1xx_it.c`, archivo no proporcionado). Cada vez que `g_app_tick_cnt` es mayor a 0, se ejecuta un **ciclo de planificación**.
+    2.  **Monitoreo y Ejecución:** En cada ciclo, se reinicia la variable de tiempo total del ciclo (`g_app_runtime_us = 0`). Luego, itera sobre todas las tareas:
+        * Mide el tiempo de ejecución de la función `task_update` de cada tarea utilizando un contador de ciclos de hardware (DWT, a través de `cycle_counter_reset()` y `cycle_counter_get_time_us()`).
+        * Acumula el tiempo de ejecución en `g_app_runtime_us`.
+        * **Calcula WCET:** Compara el tiempo de ejecución actual de la tarea con el valor histórico de `task_dta_list[index].WCET` y lo actualiza si el tiempo actual es mayor.
+
+### Tareas de Aplicación
+
+* **`task_sensor.c` (Detección de Botones):** Implementa la lógica de **antirrebote (debouncing)** para los botones (Enter, Next, Escape) mediante una **máquina de estados**.
+    * Utiliza un contador de **`tick`** con un tiempo máximo de **50** (probablemente 50 ms) para confirmar una pulsación.
+    * Una vez que se confirma una pulsación o liberación, genera un evento (por ejemplo, `EV_MEN_ENT_ACTIVE` o `EV_MEN_ENT_IDLE`) y lo envía a la cola de eventos del menú a través de `put_event_task_menu()`.
+* **`task_menu_interface.c` (Manejo de Eventos):** Proporciona una **cola circular** simple (`queue_task_a`) para la comunicación asíncrona entre `task_sensor` y `task_menu`. Las funciones `put_event_task_menu()` y `get_event_task_menu()` gestionan el paso de eventos.
+* **`task_menu.c` (Lógica del Menú):** Contiene la **máquina de estados** (`task_menu_statechart`) que gestiona el comportamiento del menú de usuario.
+    * Es dirigida por los eventos recibidos de `task_sensor` (Entrar, Siguiente, Escapar).
+    * Por ejemplo, el evento de pulsación de Enter (`EV_MEN_ENT_ACTIVE`) provoca la transición del estado `ST_MEN_XX_IDLE` a `ST_MEN_XX_ACTIVE`, y establece un temporizador (`p_task_menu_dta->tick`) a `DEL_MEN_XX_MAX` (500).
+* **`display.c`:** Contiene el *driver* para interactuar con un display de cristal líquido (LCD) de tipo HD44780 (o similar, dadas las definiciones de pines e instrucciones), gestionando la inicialización y la escritura de comandos/datos.
+
+---
+
+## 2. Evolución de Variables
+
+Las unidades de medida se indican entre paréntesis.
+
+### **`g_app_runtime_us`** (Microsegundos - $\mu$s)
+
+| Momento | Evolución y Unidad | Explicación |
+| :--- | :--- | :--- |
+| **Inicial (`app_init()`)** | Indefinido (o 0 estático) | No se inicializa explícitamente en `app_init()`. |
+| **Inicio de cada loop de `app_update()`** | **0** $\mu$s | Se **reinicia a cero** al comienzo de cada ciclo de planificación (dentro del `while (b_time_update_required)` en `app_update()`). |
+| **Fin del loop de `app_update()`** | **$T_{\text{sensor}} + T_{\text{menu}}$** $\mu$s | Es la **suma acumulada** del tiempo de ejecución real (`cycle_counter_time_us`) de todas las tareas ejecutadas en ese ciclo. Representa el tiempo de respuesta total del sistema para esa iteración. |
+
+### **`task_dta_list[index].WCET`** (Microsegundos - $\mu$s)
+
+| Momento | Evolución y Unidad | Explicación |
+| :--- | :--- | :--- |
+| **Inicial (`app_init()`)** | **0** $\mu$s | Se inicializa a `TASK_X_WCET_INI` (que es 0) en `app_init()` para todas las tareas. |
+| **Cada ejecución de la tarea** | $\max(\text{Valor Anterior}, T_{\text{actual}})$ $\mu$s | Se actualiza únicamente si el tiempo de ejecución actual de la tarea ($T_{\text{actual}}$) es **mayor** que el valor almacenado. |
+| **Sucesivos loops** | **Monotónicamente no decreciente** | Este valor registra el **Peor Tiempo de Ejecución** (Worst-Case Execution Time) observado para la tarea $i$ desde el inicio. Solo cambia para registrar un nuevo máximo. |
+
+### **`g_task_test_tick_cnt`**
+
+⚠️ **Nota:** La variable **`g_task_test_tick_cnt`** no se encuentra definida ni utilizada en los archivos proporcionados. Asumo que se refiere a **`g_app_tick_cnt`**, la variable de sincronización del planificador en `app.c`.
+
+#### **Asumiendo `g_app_tick_cnt`** (Ticks - Unidad: $\text{ms}$ o $\mu$s, según la configuración del SysTick)
+
+| Momento | Evolución y Unidad | Explicación |
+| :--- | :--- | :--- |
+| **Inicial (`app_init()`)** | **0** Ticks | Se inicializa a `G_APP_TICK_CNT_INI` (que es 0) en `app_init()`. |
+| **Interrupción de SysTick (en `stm32f1xx_it.c`)** | **Se Incrementa o se Carga con un valor $N > 0$** | Es la variable que la Interrupción de Temporizador (ISR) usa para señalar que ha transcurrido un tick de base de tiempo y que un ciclo de planificación debe ejecutarse. |
+| **Cada loop de `app_update()`** | **Se Decrementa en 1** (si es $> 0$) | El scheduler en `app_update()` consume (decrementa) 1 tick por cada ciclo de ejecución de todas las tareas. Cuando llega a 0, el scheduler espera por la siguiente interrupción. |
