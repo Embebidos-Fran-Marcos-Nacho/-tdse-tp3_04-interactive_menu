@@ -126,12 +126,12 @@ void displayInit( displayConnection_t connection )
     displayCodeWrite( DISPLAY_RS_INSTRUCTION,
                       DISPLAY_IR_FUNCTION_SET |
                       DISPLAY_IR_FUNCTION_SET_8BITS );
-    HAL_Delay(1);
+    HAL_Delay(5);
 
     displayCodeWrite( DISPLAY_RS_INSTRUCTION,
                       DISPLAY_IR_FUNCTION_SET |
                       DISPLAY_IR_FUNCTION_SET_8BITS );
-    HAL_Delay(1);
+    HAL_Delay(5);
 
     switch( display.connection ) {
         case DISPLAY_CONNECTION_GPIO_8BITS:
@@ -147,7 +147,7 @@ void displayInit( displayConnection_t connection )
             displayCodeWrite( DISPLAY_RS_INSTRUCTION,
                               DISPLAY_IR_FUNCTION_SET |
                               DISPLAY_IR_FUNCTION_SET_4BITS );
-            HAL_Delay(1);
+            HAL_Delay(5);
 
             initial8BitCommunicationIsCompleted = true;
 
@@ -156,7 +156,7 @@ void displayInit( displayConnection_t connection )
                               DISPLAY_IR_FUNCTION_SET_4BITS |
                               DISPLAY_IR_FUNCTION_SET_2LINES |
                               DISPLAY_IR_FUNCTION_SET_5x8DOTS );
-            HAL_Delay(1);
+            HAL_Delay(5);
         break;
     }
 
@@ -165,24 +165,24 @@ void displayInit( displayConnection_t connection )
                       DISPLAY_IR_DISPLAY_CONTROL_DISPLAY_OFF |
                       DISPLAY_IR_DISPLAY_CONTROL_CURSOR_OFF |
                       DISPLAY_IR_DISPLAY_CONTROL_BLINK_OFF );
-    HAL_Delay(1);
+    HAL_Delay(5);
 
     displayCodeWrite( DISPLAY_RS_INSTRUCTION,
                       DISPLAY_IR_CLEAR_DISPLAY );
-    HAL_Delay(1);
+    HAL_Delay(5);
 
     displayCodeWrite( DISPLAY_RS_INSTRUCTION,
                       DISPLAY_IR_ENTRY_MODE_SET |
                       DISPLAY_IR_ENTRY_MODE_SET_INCREMENT |
                       DISPLAY_IR_ENTRY_MODE_SET_NO_SHIFT );
-    HAL_Delay(1);
+    HAL_Delay(5);
 
     displayCodeWrite( DISPLAY_RS_INSTRUCTION,
                       DISPLAY_IR_DISPLAY_CONTROL |
                       DISPLAY_IR_DISPLAY_CONTROL_DISPLAY_ON |
                       DISPLAY_IR_DISPLAY_CONTROL_CURSOR_OFF |
                       DISPLAY_IR_DISPLAY_CONTROL_BLINK_OFF );
-    HAL_Delay(1);
+    HAL_Delay(5);
 }
 
 void displayCharPositionWrite( uint8_t charPositionX, uint8_t charPositionY )

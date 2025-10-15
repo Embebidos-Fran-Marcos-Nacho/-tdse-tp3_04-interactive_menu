@@ -18,7 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-
+#include "display.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -78,7 +78,7 @@ int main(void)
   /* USER CODE BEGIN 1 */
   #if (1 == LOGGER_CONFIG_USE_SEMIHOSTING)
 
-  initialise_monitor_handles();
+  //initialise_monitor_handles();
 
   #endif
 
