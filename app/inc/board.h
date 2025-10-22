@@ -47,22 +47,14 @@ extern "C" {
 
 /********************** macros ***********************************************/
 #define NUCLEO_F103RC		(0)
-#define NUCLEO_F303R8		(1)
-#define NUCLEO_F401RE		(2)
-#define NUCLEO_F446RE		(3)
-#define NUCLEO_F413ZH		(4)
-#define NUCLEO_F429ZI		(5)
-#define NUCLEO_F439ZI		(6)
-#define NUCLEO_F767ZI		(7)
-#define STM32F407G_DISC1	(8)
-#define STM32F429I_DISC1	(9)
+#define NUCLEO_F401RE		(1)
+#define NUCLEO_F446RE		(2)
+#define NUCLEO_F429ZI		(3)
+#define NUCLEO_F439ZI		(4)
+#define NUCLEO_F413ZH		(5)
+#define STM32F429I_DISCO1	(6)
 
 #define BOARD (NUCLEO_F103RC)
-
-/* STM32 Nucleo Boards - 32 Pins */
-#if (BOARD == NUCLEO_F303R8)
-
-#endif
 
 /* STM32 Nucleo Boards - 64 Pins */
 #if ((BOARD == NUCLEO_F103RC) || (BOARD == NUCLEO_F401RE) || (BOARD == NUCLEO_F446RE))
@@ -92,10 +84,9 @@ extern "C" {
 #define LED_A_ON		GPIO_PIN_SET
 #define LED_A_OFF		GPIO_PIN_RESET
 
-#endif
+#endif/* STM32 Nucleo Boards - 144 Pins */
 
-/* STM32 Nucleo Boards - 144 Pins */
-#if ((BOARD == NUCLEO_F413ZH) || (BOARD == NUCLEO_F429ZI) || (BOARD == NUCLEO_F439ZI) || (BOARD == NUCLEO_F767ZI))
+#if ((BOARD == NUCLEO_F429ZI) || (BOARD == NUCLEO_F439ZI) || (BOARD == NUCLEO_F413ZH))
 
 #define BTN_A_PIN		USER_Btn_Pin
 #define BTN_A_PORT		USER_Btn_GPIO_Port
@@ -110,7 +101,7 @@ extern "C" {
 #endif
 
 /* STM32 Discovery Kits */
-#if ((BOARD == STM32F407G_DISC1) || (BOARD == STM32F429I_DISC1))
+#if (BOARD == STM32F429I_DISCO1)
 
 #define BTN_A_PIN		B1_Pin
 #define BTN_A_PORT		B1_GPIO_Port

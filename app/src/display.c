@@ -6,10 +6,9 @@
 #include "main.h"
 #include <stdbool.h>
 
-/* Demo includes */
+/* Demo includes. */
 #include "logger.h"
 #include "dwt.h"
-#include "systick.h"
 
 /********************** arm_book Defines *******************************/
 //#include "arm_book_lib.h"
@@ -109,6 +108,8 @@ static void displayPinWrite( uint8_t pinName, int value );
 static void displayDataBusWrite( uint8_t dataByte );
 static void displayCodeWrite( bool type, uint8_t dataBus );
 
+void display_delay_us(uint32_t delay_us);
+
 //=====[Implementations of public functions]===================================
 void displayInit( displayConnection_t connection )
 {
@@ -126,12 +127,12 @@ void displayInit( displayConnection_t connection )
     displayCodeWrite( DISPLAY_RS_INSTRUCTION,
                       DISPLAY_IR_FUNCTION_SET |
                       DISPLAY_IR_FUNCTION_SET_8BITS );
-    HAL_Delay(5);
+    HAL_Delay(1);
 
     displayCodeWrite( DISPLAY_RS_INSTRUCTION,
                       DISPLAY_IR_FUNCTION_SET |
                       DISPLAY_IR_FUNCTION_SET_8BITS );
-    HAL_Delay(5);
+    HAL_Delay(1);
 
     switch( display.connection ) {
         case DISPLAY_CONNECTION_GPIO_8BITS:
@@ -147,7 +148,7 @@ void displayInit( displayConnection_t connection )
             displayCodeWrite( DISPLAY_RS_INSTRUCTION,
                               DISPLAY_IR_FUNCTION_SET |
                               DISPLAY_IR_FUNCTION_SET_4BITS );
-            HAL_Delay(5);
+            HAL_Delay(1);
 
             initial8BitCommunicationIsCompleted = true;
 
@@ -156,7 +157,7 @@ void displayInit( displayConnection_t connection )
                               DISPLAY_IR_FUNCTION_SET_4BITS |
                               DISPLAY_IR_FUNCTION_SET_2LINES |
                               DISPLAY_IR_FUNCTION_SET_5x8DOTS );
-            HAL_Delay(5);
+            HAL_Delay(1);
         break;
     }
 
@@ -165,24 +166,24 @@ void displayInit( displayConnection_t connection )
                       DISPLAY_IR_DISPLAY_CONTROL_DISPLAY_OFF |
                       DISPLAY_IR_DISPLAY_CONTROL_CURSOR_OFF |
                       DISPLAY_IR_DISPLAY_CONTROL_BLINK_OFF );
-    HAL_Delay(5);
+    HAL_Delay(1);
 
     displayCodeWrite( DISPLAY_RS_INSTRUCTION,
                       DISPLAY_IR_CLEAR_DISPLAY );
-    HAL_Delay(5);
+    HAL_Delay(1);
 
     displayCodeWrite( DISPLAY_RS_INSTRUCTION,
                       DISPLAY_IR_ENTRY_MODE_SET |
                       DISPLAY_IR_ENTRY_MODE_SET_INCREMENT |
                       DISPLAY_IR_ENTRY_MODE_SET_NO_SHIFT );
-    HAL_Delay(5);
+    HAL_Delay(1);
 
     displayCodeWrite( DISPLAY_RS_INSTRUCTION,
                       DISPLAY_IR_DISPLAY_CONTROL |
                       DISPLAY_IR_DISPLAY_CONTROL_DISPLAY_ON |
                       DISPLAY_IR_DISPLAY_CONTROL_CURSOR_OFF |
                       DISPLAY_IR_DISPLAY_CONTROL_BLINK_OFF );
-    HAL_Delay(5);
+    HAL_Delay(1);
 }
 
 void displayCharPositionWrite( uint8_t charPositionX, uint8_t charPositionY )
@@ -236,11 +237,8 @@ static void displayCodeWrite( bool type, uint8_t dataBus )
 		displayPinWrite( DISPLAY_PIN_RS, DISPLAY_RS_INSTRUCTION );
 	else
 		displayPinWrite( DISPLAY_PIN_RS, DISPLAY_RS_DATA );
-
 	displayPinWrite( DISPLAY_PIN_RW, DISPLAY_RW_WRITE );
 	displayDataBusWrite( dataBus );
-    systick_delay_us(DISPLAY_DEL_37US);
-
 }
 
 static void displayPinWrite( uint8_t pinName, int value )
@@ -287,7 +285,6 @@ static void displayDataBusWrite( uint8_t dataBus )
     displayPinWrite( DISPLAY_PIN_D6, dataBus & 0b01000000 );
     displayPinWrite( DISPLAY_PIN_D5, dataBus & 0b00100000 );
     displayPinWrite( DISPLAY_PIN_D4, dataBus & 0b00010000 );
-
     switch( display.connection ) {
         case DISPLAY_CONNECTION_GPIO_8BITS:
             displayPinWrite( DISPLAY_PIN_D3, dataBus & 0b00001000 );
@@ -300,11 +297,11 @@ static void displayDataBusWrite( uint8_t dataBus )
             if ( initial8BitCommunicationIsCompleted == true) {
                 displayPinWrite( DISPLAY_PIN_EN, ON );
                 //HAL_Delay(1);
-                systick_delay_us(DISPLAY_DEL_01US);
+                display_delay_us(DISPLAY_DEL_01US);
 
                 displayPinWrite( DISPLAY_PIN_EN, OFF );
                 //HAL_Delay(1);
-                systick_delay_us(DISPLAY_DEL_01US);
+                display_delay_us(DISPLAY_DEL_37US);
 
                 displayPinWrite( DISPLAY_PIN_D7, dataBus & 0b00001000 );
                 displayPinWrite( DISPLAY_PIN_D6, dataBus & 0b00000100 );
@@ -316,11 +313,20 @@ static void displayDataBusWrite( uint8_t dataBus )
     }
     displayPinWrite( DISPLAY_PIN_EN, ON );
     //HAL_Delay(1);
-    systick_delay_us(DISPLAY_DEL_01US);
+    display_delay_us(DISPLAY_DEL_01US);
 
     displayPinWrite( DISPLAY_PIN_EN, OFF );
     //HAL_Delay(1);
-    systick_delay_us(DISPLAY_DEL_01US);
+    display_delay_us(DISPLAY_DEL_37US);
+}
+
+void display_delay_us(uint32_t delay_us)
+{
+	uint32_t now = cycle_counter_time_us();
+	uint32_t then = delay_us + now;
+
+	while (now < then)
+		now = cycle_counter_time_us();
 }
 
 /********************** end of file ******************************************/

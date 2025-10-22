@@ -37,14 +37,14 @@
  */
 
 /********************** inclusions *******************************************/
-/* Project includes */
+/* Project includes. */
 #include "main.h"
 
-/* Demo includes */
+/* Demo includes. */
 #include "logger.h"
 #include "dwt.h"
 
-/* Application & Tasks includes */
+/* Application & Tasks includes. */
 #include "board.h"
 #include "app.h"
 #include "task_menu_attribute.h"

@@ -1,4 +1,4 @@
-Example: tdse-tp3_04-interactive_menu
+Example: tdse-tp3_06-interactive_menu
 
  Description:
  Bare Metal - Event-Triggered Systems (ETS)
@@ -11,13 +11,9 @@ Example: tdse-tp3_04-interactive_menu
   app.c (app.h)
    Endless loops, which execute tasks with fixed computing time. This 
    sequential execution is only deviated from when an interrupt event occurs.
-   Cyclic Executive (Update by Time Code, period = 1mS)
 
-  task_sensor.c (task_sensor.h, task_sensor_attribute.h) 
-   Non-Blocking & Update By Time Code -> Sensor Modeling
-   
-  task_menu.c (task_menu.h) 
-   Non-Blocking & Update By Time Code -> Menu Code Integration
+  task_test.c (task_test.h) 
+   Non-Blocking & Update By Time Code -> Test Code Integration
   
   display.c (display.h)
    Non-Blocking Code -> Display Code Library
@@ -28,9 +24,6 @@ Example: tdse-tp3_04-interactive_menu
   dwt.h
    Utilities for Mesure "clock cycle" and "execution time" of code
   
-  systick.c (systick.h) 
-   Utilities for delay "microseconds"
-
   Special connection requirements:
    There are no special connection requirements for this example.
 

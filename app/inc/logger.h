@@ -51,7 +51,7 @@ extern "C" {
 
 /********************** macros ***********************************************/
 
-#define LOGGER_CONFIG_ENABLE                    (1)
+#define LOGGER_CONFIG_ENABLE                    (0)
 #define LOGGER_CONFIG_MAXLEN                    (64)
 #define LOGGER_CONFIG_USE_SEMIHOSTING           (1)
 
@@ -66,11 +66,6 @@ extern "C" {
 #else
 #define LOGGER_LOG(...)
 #endif
-
-#define LOGGER_INFO(...)\
-    LOGGER_LOG("[info] ");\
-    LOGGER_LOG(__VA_ARGS__);\
-    LOGGER_LOG("\n");
 
 #define GET_NAME(var)  #var
 

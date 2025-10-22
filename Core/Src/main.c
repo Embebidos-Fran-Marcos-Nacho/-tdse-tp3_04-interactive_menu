@@ -18,12 +18,15 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "display.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
-/* Application includes. */
+/* Demo includes. */
 #include "logger.h"
+#include "dwt.h"
+
+/* Application includes. */
 #include "app.h"
 
 /* USER CODE END Includes */
@@ -60,11 +63,7 @@ static void MX_USART2_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-#if (1 == LOGGER_CONFIG_USE_SEMIHOSTING)
-
 extern void initialise_monitor_handles(void);
-
-#endif
 
 /* USER CODE END 0 */
 
@@ -76,11 +75,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  #if (1 == LOGGER_CONFIG_USE_SEMIHOSTING)
-
-  //initialise_monitor_handles();
-
-  #endif
+	//initialise_monitor_handles();
 
   /* USER CODE END 1 */
 
@@ -105,8 +100,8 @@ int main(void)
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
-  /* Application Init */
-  app_init();
+	/* Application Init */
+	app_init();
 
   /* USER CODE END 2 */
 
@@ -118,8 +113,8 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-    /* Application Update */
-    app_update();
+	  /* Application Update */
+	  app_update();
   }
   /* USER CODE END 3 */
 }
@@ -227,15 +222,15 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : LD2_Pin */
-  GPIO_InitStruct.Pin = LD2_Pin;
+  /*Configure GPIO pins : LD2_Pin D7_Pin D8_Pin */
+  GPIO_InitStruct.Pin = LD2_Pin|D7_Pin|D8_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : D12_Pin D11_Pin D2_Pin */
-  GPIO_InitStruct.Pin = D12_Pin|D11_Pin|D2_Pin;
+  /*Configure GPIO pins : D12_Pin D11_Pin */
+  GPIO_InitStruct.Pin = D12_Pin|D11_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
@@ -243,23 +238,22 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pins : D6_Pin D5_Pin D4_Pin */
   GPIO_InitStruct.Pin = D6_Pin|D5_Pin|D4_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : D9_Pin */
   GPIO_InitStruct.Pin = D9_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(D9_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : D7_Pin D8_Pin */
-  GPIO_InitStruct.Pin = D7_Pin|D8_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  /*Configure GPIO pin : D2_Pin */
+  GPIO_InitStruct.Pin = D2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(D2_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : D10_Pin */
   GPIO_InitStruct.Pin = D10_Pin;
